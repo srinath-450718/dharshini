@@ -4,8 +4,9 @@ import { User } from "../models/User.js";
 import { Submission } from "../models/Submission.js";
 import { generateToken, verifyToken } from "../utils/session.js";
 import { AuthenticatedRequest } from "../middleware/adminAuth.js";
-import { getDbStatus } from "../config/database.js";
+import { connectDatabase, getDbStatus } from "../config/database.js";
 import { getSubmissionsFromFile } from "../utils/fileStorage.js";
+import { getAdminConfig } from "../utils/initAdmin.js";
 
 const COOKIE_NAME = "admin_token";
 
@@ -82,12 +83,15 @@ export const getAdminCookieOptions = (req: Request) => {
 };
 
 export const adminLogin = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const clientIp =
-      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-      req.ip ||
-      "unknown";
+  const clientIp =
+    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+    req.ip ||
+    "unknown";
 
+  const { email, password, username } = req.body || {};
+  const inputIdentifier = (email || username || "").trim().toLowerCase();
+
+  try {
     if (isRateLimited(clientIp)) {
       res.status(429).json({
         success: false,
@@ -95,9 +99,6 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
       });
       return;
     }
-
-    const { email, password, username } = req.body;
-    const inputIdentifier = (email || username || "").trim().toLowerCase();
 
     if (!inputIdentifier || !password) {
       recordFailedAttempt(clientIp);
@@ -108,20 +109,53 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // 1. Query MongoDB for admin user by normalized email
-    const user = await User.findOne({ email: inputIdentifier }).select("+passwordHash");
+    const { email: configAdminEmail, password: configAdminPassword } = getAdminConfig();
 
-    if (!user || user.role !== "admin" || !user.passwordHash) {
-      recordFailedAttempt(clientIp);
-      res.status(401).json({
-        success: false,
-        message: "Invalid email or password.",
-      });
-      return;
+    let user = null;
+
+    // 1. Check MongoDB connection or attempt reconnect
+    if (!getDbStatus()) {
+      console.warn("[Admin Login] MongoDB not connected; attempting reconnect...");
+      await connectDatabase();
     }
 
-    // 2. Verify password with bcrypt
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    // 2. Query MongoDB for admin user if connected
+    if (getDbStatus()) {
+      try {
+        user = await User.findOne({ email: inputIdentifier }).select("+passwordHash");
+      } catch (dbErr) {
+        console.error(
+          "[Admin Login] MongoDB query error:",
+          dbErr instanceof Error ? dbErr.message : String(dbErr)
+        );
+      }
+    }
+
+    let isMatch = false;
+    let authenticatedUserId = "admin_primary";
+    let authenticatedEmail = inputIdentifier;
+
+    if (user && user.role === "admin" && user.passwordHash) {
+      // Compare password with bcrypt against DB record
+      isMatch = await bcrypt.compare(password, user.passwordHash);
+      authenticatedUserId = user._id.toString();
+      authenticatedEmail = user.email;
+    } else {
+      // Resilient fallback: Compare against configured admin credentials
+      if (inputIdentifier === configAdminEmail) {
+        isMatch = password === configAdminPassword;
+        authenticatedUserId = "admin_primary";
+        authenticatedEmail = configAdminEmail;
+
+        // If DB is connected, asynchronously create/sync admin in DB
+        if (isMatch && getDbStatus()) {
+          bcrypt.hash(configAdminPassword, 10).then((hash) => {
+            User.create({ email: configAdminEmail, passwordHash: hash, role: "admin" }).catch(() => {});
+          });
+        }
+      }
+    }
+
     if (!isMatch) {
       recordFailedAttempt(clientIp);
       res.status(401).json({
@@ -131,33 +165,36 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // 3. Clear failed attempts on success
+    // Success: clear failed attempts
     clearFailedAttempts(clientIp);
 
-    // 4. Create JWT with minimum payload
+    // Create JWT
     const token = generateToken({
-      userId: user._id.toString(),
-      email: user.email,
+      userId: authenticatedUserId,
+      email: authenticatedEmail,
       role: "admin",
     });
 
-    // 5. Store JWT in secure HTTP-only cookie
+    // Store JWT in secure HTTP-only cookie
     const cookieOpts = getAdminCookieOptions(req);
     res.cookie(COOKIE_NAME, token, {
       ...cookieOpts,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    // 6. Return response (never return password, passwordHash, or token)
     res.json({
       success: true,
       message: "Authentication successful.",
     });
   } catch (error) {
-    console.error("[Admin] Login error:", error);
-    res.status(500).json({
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    // Safe logging without passwords, tokens, or DB credentials
+    console.error(
+      `[Admin Login Failure] Identifier: ${inputIdentifier ? inputIdentifier.slice(0, 3) + "***" : "none"} | IP: ${clientIp} | Reason: ${errorMsg} | DB Connected: ${getDbStatus()} | Secret Defined: ${Boolean(process.env.SESSION_SECRET || process.env.JWT_SECRET)}`
+    );
+    res.status(401).json({
       success: false,
-      message: "Internal server error during login.",
+      message: "Invalid email or password.",
     });
   }
 };
@@ -192,15 +229,41 @@ export const getAdminSession = async (req: Request, res: Response): Promise<void
     return;
   }
 
+  const { email: configAdminEmail } = getAdminConfig();
+
+  // If primary admin or DB is disconnected, rely on validated JWT payload
+  if (payload.userId === "admin_primary" || !getDbStatus()) {
+    if (payload.email.toLowerCase() === configAdminEmail) {
+      res.json({
+        authenticated: true,
+        user: {
+          email: payload.email,
+          role: "admin",
+        },
+      });
+      return;
+    }
+  }
+
   try {
     let user = null;
-    if (payload.userId) {
+    if (payload.userId && payload.userId !== "admin_primary") {
       user = await User.findById(payload.userId);
     } else if (payload.email) {
       user = await User.findOne({ email: payload.email.toLowerCase() });
     }
 
     if (!user || user.role !== "admin") {
+      if (payload.email.toLowerCase() === configAdminEmail) {
+        res.json({
+          authenticated: true,
+          user: {
+            email: payload.email,
+            role: "admin",
+          },
+        });
+        return;
+      }
       res.json({ authenticated: false });
       return;
     }
@@ -214,6 +277,16 @@ export const getAdminSession = async (req: Request, res: Response): Promise<void
       },
     });
   } catch {
+    if (payload.email.toLowerCase() === configAdminEmail) {
+      res.json({
+        authenticated: true,
+        user: {
+          email: payload.email,
+          role: "admin",
+        },
+      });
+      return;
+    }
     res.json({ authenticated: false });
   }
 };
