@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+@theme {
+  --color-midnight-950: #050817;
+  --color-midnight-900: #080D25;
+  --color-midnight-850: #0D1330;
+  --color-midnight-800: #121838;
+  --color-midnight-700: #151A3A;
+  --color-midnight-600: #1E254E;
+
+  --color-accent-pink: #F05AA6;
+  --color-accent-pink-subtle: #E88AAA;
+  --color-accent-pink-blush: #D97898;
+  --color-accent-pink-dark: #C93984;
+  --color-accent-gold: #F5C84B;
+  --color-accent-gold-dark: #D4A82F;
+
+  --color-secondary-dark: #111936;
+  --color-cream: #FFF7F0;
+  --color-cream-muted: #E2D9D2;
+  --color-muted-blue: #AEB6CC;
+  --color-muted-blue-dim: #717A94;
+
+  --font-serif: 'Cormorant Garamond', Georgia, serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-cinzel: 'Cinzel', serif;
+  --font-script: 'Great Vibes', 'Dancing Script', cursive;
+}
+
+
+@layer base {
+  * {
+    border-color: rgba(255, 247, 240, 0.08);
+  }
+
+  html {
+    background-color: #080D25;
+    color: #FFF7F0;
+    font-family: var(--font-sans);
+    font-size: 16px;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  body {
+    background-color: #080D25;
+    color: #FFF7F0;
+    overflow-x: hidden;
+    max-width: 100vw;
+    margin: 0;
+    padding: 0;
+    line-height: 1.65;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #080D25;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1C2248;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #E88AAA;
+  }
+}
+
+/* Custom Colorful Gradients & Utilities for Maximum Beauty & Legibility */
+.text-gradient-gold-rose {
+  background: linear-gradient(135deg, #FFF7F0 0%, #F5C84B 50%, #F05AA6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #FFF7F0 0%, #F5C84B 60%, #E88AAA 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-sunset {
+  background: linear-gradient(135deg, #F5C84B 0%, #FF75A0 50%, #C93984 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-rose {
+  background: linear-gradient(135deg, #FFF7F0 0%, #FF75A0 60%, #F05AA6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom Cinematic Glows & Utility Classes */
+.glow-pink {
+  box-shadow: 0 0 26px rgba(240, 90, 166, 0.28);
+}
+
+.glow-pink-subtle {
+  box-shadow: 0 0 18px rgba(232, 138, 170, 0.2);
+}
+
+.glow-pink-text {
+  text-shadow: 0 0 18px rgba(240, 90, 166, 0.5);
+}
+
+.glow-gold {
+  box-shadow: 0 0 35px rgba(245, 200, 75, 0.35);
+}
+
+.glow-gold-text {
+  text-shadow: 0 0 22px rgba(245, 200, 75, 0.55);
+}
+
+.glow-card {
+  border: 1px solid rgba(245, 200, 75, 0.3);
+  box-shadow: 0 10px 35px -5px rgba(240, 90, 166, 0.22), 0 0 20px rgba(245, 200, 75, 0.18);
+}
+
+.glass-panel {
+  background: rgba(13, 19, 48, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 247, 240, 0.1);
+}
+
+.glass-panel-hover {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-panel-hover:hover {
+  background: rgba(21, 26, 58, 0.85);
+  border-color: rgba(240, 90, 166, 0.35);
+  box-shadow: 0 10px 40px -10px rgba(240, 90, 166, 0.3);
+}
+
+/* Shimmer animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, rgba(255,247,240,0) 0%, rgba(240,90,166,0.18) 50%, rgba(255,247,240,0) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 4s infinite linear;
+}
+
+/* Subtle float animation */
+@keyframes softFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-soft-float {
+  animation: softFloat 6s ease-in-out infinite;
+}
+
+/* Ambient pulse */
+@keyframes pulseAura {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.06);
+  }
+}
+
+.animate-pulse-aura {
+  animation: pulseAura 8s ease-in-out infinite;
+}
+
+/* Downward moving scroll glow beam */
+@keyframes scrollGlow {
+  0% {
+    top: -20px;
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    top: 44px;
+    opacity: 0;
+  }
+}
+
+.animate-scroll-glow {
+  animation: scrollGlow 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+
