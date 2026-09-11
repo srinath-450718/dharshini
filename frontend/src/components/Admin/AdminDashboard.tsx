@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { LogOut, Calendar, CheckCircle2, RefreshCw, AlertCircle, Inbox } from "lucide-react";
-import { getSubmissions, logoutAdmin, type SubmissionData } from "../../services/adminApi";
+import { getAdminSession, getSubmissions, logoutAdmin, type SubmissionData } from "../../services/adminApi";
 
 export interface AdminDashboardProps {
   onLogout: () => void;
@@ -20,6 +20,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setError(null);
 
     try {
+      // First call: GET /api/admin/session with credentials: "include"
+      const session = await getAdminSession();
+      if (!session.authenticated) {
+        setSubmissions([]);
+        onSessionExpired();
+        return;
+      }
+
+      // Session confirmed active: retrieve submissions
       const data = await getSubmissions();
       setSubmissions(data.submissions || []);
     } catch (err: unknown) {

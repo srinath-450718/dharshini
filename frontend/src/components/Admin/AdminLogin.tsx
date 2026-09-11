@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Eye, EyeOff, Lock, AlertCircle, Loader2 } from "lucide-react";
-import { loginAdmin } from "../../services/adminApi";
+import { loginAdmin, getAdminSession } from "../../services/adminApi";
 
 export interface AdminLoginProps {
   onLoginSuccess: () => void;
@@ -17,7 +17,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
   const [isChecking, setIsChecking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(initialError);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (isChecking) return;
@@ -42,6 +42,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
 
     try {
       await loginAdmin(trimmedEmail, password);
+      // Requirement 5: Call GET /api/admin/session with credentials: "include"
+      await getAdminSession();
       // Success: proceed to dashboard
       onLoginSuccess();
     } catch {

@@ -106,11 +106,9 @@ npm start
 | :--- | :---: | :--- | :--- |
 | `PORT` | Optional | Port for the Express server (defaults to 5000). | `5000` |
 | `NODE_ENV` | Yes | Environment mode (`development` or `production`). | `production` |
-| `CLIENT_ORIGIN` | Yes | Allowed frontend origin(s) for CORS. Can be comma-separated. | `https://dharshini.vercel.app` |
+| `CLIENT_ORIGIN` | Yes | Allowed frontend origin(s) for CORS. Can be comma-separated. | `https://your-frontend.onrender.com` |
 | `MONGODB_URI` | Yes | MongoDB Atlas connection string. | `mongodb+srv://<user>:<password>@cluster.mongodb.net/<db>` |
-| `ADMIN_EMAIL` | Yes | Authorized email address for admin login. | `your-email@example.com` |
-| `ADMIN_PASSWORD_HASH` | Yes | Bcrypt hash of the admin password. | `$2a$10$...` |
-| `SESSION_SECRET` | Yes | Random high-entropy secret string for JWT signing. | `long_random_hex_string` |
+| `SESSION_SECRET` | Yes | Random high-entropy secret string for JWT cookie signing. | `long_random_hex_string` |
 
 ---
 

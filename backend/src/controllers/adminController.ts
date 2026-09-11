@@ -1,9 +1,10 @@
 import { Request, Response } from "express";
+import bcrypt from "bcryptjs";
+import { User } from "../models/User.js";
 import { Submission } from "../models/Submission.js";
-import { comparePassword } from "../utils/password.js";
 import { generateToken, verifyToken } from "../utils/session.js";
-import { AuthenticatedRequest } from "../middleware/auth.js";
-import { connectDatabase, getDbStatus } from "../config/database.js";
+import { AuthenticatedRequest } from "../middleware/adminAuth.js";
+import { getDbStatus } from "../config/database.js";
 import { getSubmissionsFromFile } from "../utils/fileStorage.js";
 
 const COOKIE_NAME = "admin_token";
@@ -63,9 +64,29 @@ const clearFailedAttempts = (ip: string) => {
   failedAttempts.delete(ip);
 };
 
+export const getAdminCookieOptions = (req: Request) => {
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    req.secure ||
+    req.headers["x-forwarded-proto"] === "https" ||
+    Boolean(process.env.RENDER) ||
+    Boolean(process.env.CLIENT_ORIGIN && !process.env.CLIENT_ORIGIN.includes("localhost")) ||
+    Boolean(process.env.CLIENT_ORIGINS && !process.env.CLIENT_ORIGINS.includes("localhost"));
+
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+    path: "/",
+  };
+};
+
 export const adminLogin = async (req: Request, res: Response): Promise<void> => {
   try {
-    const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+    const clientIp =
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+      req.ip ||
+      "unknown";
 
     if (isRateLimited(clientIp)) {
       res.status(429).json({
@@ -78,19 +99,6 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
     const { email, password, username } = req.body;
     const inputIdentifier = (email || username || "").trim().toLowerCase();
 
-    const expectedEmail = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
-    const expectedUsername = (process.env.ADMIN_USERNAME || "").trim().toLowerCase();
-    const expectedHash = process.env.ADMIN_PASSWORD_HASH;
-
-    if ((!expectedEmail && !expectedUsername) || !expectedHash) {
-      console.error("[Admin] ADMIN_EMAIL / ADMIN_PASSWORD_HASH not configured on server.");
-      res.status(500).json({
-        success: false,
-        message: "Admin authentication is not configured on the server.",
-      });
-      return;
-    }
-
     if (!inputIdentifier || !password) {
       recordFailedAttempt(clientIp);
       res.status(401).json({
@@ -100,11 +108,10 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Email validation & matching
-    const emailMatches = expectedEmail && inputIdentifier === expectedEmail;
-    const usernameMatches = expectedUsername && inputIdentifier === expectedUsername;
+    // 1. Query MongoDB for admin user by normalized email
+    const user = await User.findOne({ email: inputIdentifier }).select("+passwordHash");
 
-    if (!emailMatches && !usernameMatches) {
+    if (!user || user.role !== "admin" || !user.passwordHash) {
       recordFailedAttempt(clientIp);
       res.status(401).json({
         success: false,
@@ -113,8 +120,8 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Password verification via bcrypt
-    const isMatch = await comparePassword(password, expectedHash);
+    // 2. Verify password with bcrypt
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       recordFailedAttempt(clientIp);
       res.status(401).json({
@@ -124,20 +131,24 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Success: clear rate limiter for this IP
+    // 3. Clear failed attempts on success
     clearFailedAttempts(clientIp);
 
-    // Issue HTTP-only cookie
-    const token = generateToken({ email: inputIdentifier, role: "admin" });
-    const isProduction = process.env.NODE_ENV === "production";
+    // 4. Create JWT with minimum payload
+    const token = generateToken({
+      userId: user._id.toString(),
+      email: user.email,
+      role: "admin",
+    });
 
+    // 5. Store JWT in secure HTTP-only cookie
+    const cookieOpts = getAdminCookieOptions(req);
     res.cookie(COOKIE_NAME, token, {
-      httpOnly: true,
-      sameSite: isProduction ? "none" : "lax",
-      secure: isProduction,
+      ...cookieOpts,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
+    // 6. Return response (never return password, passwordHash, or token)
     res.json({
       success: true,
       message: "Authentication successful.",
@@ -151,17 +162,18 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
-export const adminLogout = (_req: Request, res: Response): void => {
-  const isProduction = process.env.NODE_ENV === "production";
+export const adminLogout = (req: Request, res: Response): void => {
+  const cookieOpts = getAdminCookieOptions(req);
   res.clearCookie(COOKIE_NAME, {
-    httpOnly: true,
-    sameSite: isProduction ? "none" : "lax",
-    secure: isProduction,
+    httpOnly: cookieOpts.httpOnly,
+    secure: cookieOpts.secure,
+    sameSite: cookieOpts.sameSite,
+    path: cookieOpts.path,
   });
   res.json({ success: true, message: "Logged out successfully." });
 };
 
-export const getAdminSession = (req: Request, res: Response): void => {
+export const getAdminSession = async (req: Request, res: Response): Promise<void> => {
   const cookieToken = req.cookies?.admin_token;
   const headerToken = req.headers.authorization?.startsWith("Bearer ")
     ? req.headers.authorization.split(" ")[1]
@@ -180,10 +192,30 @@ export const getAdminSession = (req: Request, res: Response): void => {
     return;
   }
 
-  // Strictly return only authenticated: true, no sensitive secrets or database info
-  res.json({
-    authenticated: true,
-  });
+  try {
+    let user = null;
+    if (payload.userId) {
+      user = await User.findById(payload.userId);
+    } else if (payload.email) {
+      user = await User.findOne({ email: payload.email.toLowerCase() });
+    }
+
+    if (!user || user.role !== "admin") {
+      res.json({ authenticated: false });
+      return;
+    }
+
+    // Never return password, passwordHash, or JWT
+    res.json({
+      authenticated: true,
+      user: {
+        email: user.email,
+        role: "admin",
+      },
+    });
+  } catch {
+    res.json({ authenticated: false });
+  }
 };
 
 export const getSubmissions = async (
@@ -270,7 +302,6 @@ export const getSubmissions = async (
     });
   } catch (error) {
     console.error("[Admin] Error retrieving submissions:", error);
-    // Never fail with 500: always return a valid 200 payload even on unexpected error
     res.json({
       success: true,
       count: 0,

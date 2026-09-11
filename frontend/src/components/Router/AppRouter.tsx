@@ -59,8 +59,10 @@ export const AppRouter: React.FC = () => {
     navigate("/admin/dashboard");
   };
 
+  const normalizedPath = currentPath.replace(/\/+$/, "") || "/";
+
   // Route 1: /admin/dashboard
-  if (currentPath === "/admin/dashboard") {
+  if (normalizedPath === "/admin/dashboard") {
     // If still verifying session on initial load
     if (isAdminAuthenticated === null) {
       return (
@@ -89,7 +91,7 @@ export const AppRouter: React.FC = () => {
   }
 
   // Route 2: /admin
-  if (currentPath === "/admin") {
+  if (normalizedPath === "/admin") {
     // If already authenticated, redirect straight to dashboard
     if (isAdminAuthenticated === true) {
       return (

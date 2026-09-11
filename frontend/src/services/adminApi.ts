@@ -29,6 +29,10 @@ export interface LoginResponse {
 
 export interface SessionResponse {
   authenticated: boolean;
+  user?: {
+    email: string;
+    role: string;
+  };
 }
 
 export interface SubmissionsResponse {
@@ -92,9 +96,7 @@ export const getAdminSession = async (): Promise<SessionResponse> => {
     const response = await fetch(reqUrl, {
       method: "GET",
       credentials: "include",
-      headers: {
-        "Cache-Control": "no-store",
-      },
+      cache: "no-store",
     });
 
     console.log("[ADMIN API] Response status:", response.status);
@@ -105,7 +107,10 @@ export const getAdminSession = async (): Promise<SessionResponse> => {
       return { authenticated: false };
     }
 
-    return { authenticated: Boolean(data?.authenticated) };
+    return {
+      authenticated: Boolean(data?.authenticated),
+      user: data?.user,
+    };
   } catch (err) {
     console.error("[ADMIN API] Error during getAdminSession:", err);
     return { authenticated: false };
@@ -121,9 +126,7 @@ export const getSubmissions = async (): Promise<SubmissionsResponse> => {
     const response = await fetch(reqUrl, {
       method: "GET",
       credentials: "include",
-      headers: {
-        "Cache-Control": "no-store",
-      },
+      cache: "no-store",
     });
 
     console.log("[ADMIN API] Response status:", response.status);
