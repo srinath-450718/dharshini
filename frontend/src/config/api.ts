@@ -7,9 +7,9 @@
  * which are proxied by Vite dev server.
  * In production, VITE_API_BASE_URL should point to the deployed backend domain.
  */
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || "https://dharshini-3wby.onrender.com";
 
-export const API_BASE_URL = typeof rawBaseUrl === "string" ? rawBaseUrl.replace(/\/+$/, "") : "http://localhost:5000";
+export const API_BASE_URL = typeof rawBaseUrl === "string" ? rawBaseUrl.replace(/\/+$/, "") : "https://dharshini-3wby.onrender.com";
 
 export const getApiUrl = (endpoint: string): string => {
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
